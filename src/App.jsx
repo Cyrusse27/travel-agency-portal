@@ -182,26 +182,33 @@ export default function App() {
     remarks: ""
   });
 
-  // Helper Function: Send Data to Google Sheet
+  // Updated Helper Function: Send Data to Google Sheet with no-cors mode
   const sendToGoogleSheet = async (payload) => {
-    if (!GOOGLE_WEBHOOK_URL || GOOGLE_WEBHOOK_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE")) {
+    if (
+      !GOOGLE_WEBHOOK_URL ||
+      GOOGLE_WEBHOOK_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE")
+    ) {
       console.warn("Google Webhook URL not set. Data saved locally only.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const response = await fetch(GOOGLE_WEBHOOK_URL, {
+
+      // Using mode: "no-cors" prevents browser CORS blocks on Google Apps Script redirects
+      await fetch(GOOGLE_WEBHOOK_URL, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        mode: "no-cors",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8"
+        },
         body: JSON.stringify(payload)
       });
-      const result = await response.json();
-      if (result.status === "SUCCESS") {
-        alert("✅ Saved to Google Sheet successfully!");
-      }
+
+      alert("✅ Request sent to Google Sheet!");
     } catch (error) {
       console.error("Error pushing to Google Sheet:", error);
+      alert("❌ Network error sending data.");
     } finally {
       setIsSubmitting(false);
     }
