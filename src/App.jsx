@@ -19,7 +19,7 @@ import {
 // 1. CONFIGURATION: PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
 // ============================================================================
 const GOOGLE_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxm7CADEI8B0rL6AqH1uEC2RM4IjTUNFgtJlmKy1t9FVC6ZtnXSX0HyB0W0mVxigwsLKg/exec";
+  "https://script.google.com/macros/s/AKfycbyNOcHKUvAg6AQSzRJyvooZ1Sao-nwmpyGUVIjjq-tRluKHHqk_k8NzxOisxj4Lfiej/exec";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
