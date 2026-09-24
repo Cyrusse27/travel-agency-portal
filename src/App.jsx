@@ -1,937 +1,448 @@
-import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import React, { useState, useEffect } from "react";
 import {
   Users,
   Calendar,
   CreditCard,
-  DollarSign,
-  TrendingUp,
-  AlertCircle,
-  Clock,
-  CheckCircle2,
+  LayoutDashboard,
   Plus,
-  Upload,
-  Download,
   Search,
-  Filter,
-  FileSpreadsheet,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  FileText,
+  Building,
+  TrendingUp,
+  DollarSign,
+  UserPlus,
+  Compass,
   ArrowUpRight,
-  ArrowDownLeft,
-  ChevronRight,
-  X
-} from 'lucide-react';
+  ShieldCheck,
+  Plane
+} from "lucide-react";
 
-// ==========================================
-// CONFIGURATION & INITIAL MOCK DATA
-// ==========================================
-
-// Paste your Google Apps Script Web App URL from Step 3 here:
-const GOOGLE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxm7CADEI8B0rL6AqH1uEC2RM4IjTUNFgtJlmKy1t9FVC6ZtnXSX0HyB0W0mVxigwsLKg/exec";
-
-const INITIAL_CLIENTS = [
-  { clientId: "CL-0001", clientName: "Juan Dela Cruz", contactNo: "09171234567", email: "juan@example.com", clientType: "VIP", prefContact: "WhatsApp", clientSource: "Facebook", remarks: "Prefers window seats" },
-  { clientId: "CL-0002", clientName: "Maria Santos", contactNo: "09189876543", email: "maria@example.com", clientType: "Regular", prefContact: "Email", clientSource: "Referral", remarks: "Vegetarian meal preference" },
-  { clientId: "CL-0003", clientName: "Corporate Acme Corp", contactNo: "0281234567", email: "travel@acme.com", clientType: "Corporate", prefContact: "Phone", clientSource: "Website", remarks: "Requires official receipts" }
-];
-
-const INITIAL_BOOKINGS = [
-  {
-    bookingId: "BK-0001",
-    bookingDate: "2026-09-01",
-    clientId: "CL-0001",
-    clientName: "Juan Dela Cruz",
-    travelStart: "2026-10-05",
-    travelEnd: "2026-10-10",
-    package: "Tokyo 5D4N Autumn Tour",
-    operator: "GFT Tours",
-    bookingType: "Group Tour",
-    salesAmount: 65000,
-    costAmount: 48000,
-    invoice: "Done",
-    ticket: "Done",
-    voucher: "Done",
-    baggage: "Done",
-    briefing: "Pending",
-    otherPending: "",
-    overallStatus: "Confirmed",
-    remarks: "Passport copies received"
-  },
-  {
-    bookingId: "BK-0002",
-    bookingDate: "2026-09-10",
-    clientId: "CL-0002",
-    clientName: "Maria Santos",
-    travelStart: "2026-09-28",
-    travelEnd: "2026-10-02",
-    package: "Seoul 5D4N Express",
-    operator: "Asia Travel Ltd",
-    bookingType: "Customized",
-    salesAmount: 42000,
-    costAmount: 31000,
-    invoice: "Done",
-    ticket: "Pending",
-    voucher: "Pending",
-    baggage: "Pending",
-    briefing: "Pending",
-    otherPending: "K-ETA approval pending",
-    overallStatus: "Processing",
-    remarks: "Waiting for flight release"
-  }
-];
-
-const INITIAL_PAYMENTS = [
-  { paymentId: "PAY-0001", bookingId: "BK-0001", clientId: "CL-0001", paymentDate: "2026-09-02", amount: 30000, direction: "Client to Us", method: "Bank Transfer", refNo: "TXN102938", type: "Deposit", remarks: "Initial downpayment" },
-  { paymentId: "PAY-0002", bookingId: "BK-0001", clientId: "CL-0001", paymentDate: "2026-09-15", amount: 35000, direction: "Client to Us", method: "Credit Card", refNo: "TXN104500", type: "Full Payment", remarks: "Final balance" },
-  { paymentId: "PAY-0003", bookingId: "BK-0001", clientId: "CL-0001", paymentDate: "2026-09-16", amount: 48000, direction: "Us to Operator", method: "Bank Transfer", refNo: "OP-99812", type: "Full Payment", remarks: "Settled operator cost" },
-  { paymentId: "PAY-0004", bookingId: "BK-0002", clientId: "CL-0002", paymentDate: "2026-09-11", amount: 20000, direction: "Client to Us", method: "GCash", refNo: "GC-887123", type: "Deposit", remarks: "Partial payment" }
-];
+// ============================================================================
+// 1. CONFIGURATION: PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+// ============================================================================
+const GOOGLE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxm7CADEI8B0rL6AqH1uEC2RM4IjTUNFgtJlmKy1t9FVC6ZtnXSX0HyB0W0mVxigwsLKg/exec"; 
+// Example: "https://script.google.com/macros/s/AKfycbx.../exec"
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [clients, setClients] = useState(INITIAL_CLIENTS);
-  const [bookings, setBookings] = useState(INITIAL_BOOKINGS);
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState(""); // 'client', 'booking', 'payment'
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Search & Filter
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  // Initial State Data
+  const [clients, setClients] = useState([
+    { id: "CL-0001", name: "Juan Dela Cruz", phone: "09171234567", email: "juan@example.com", type: "Individual", contact: "Viber", source: "Facebook", remarks: "VIP Client", status: "Active" },
+    { id: "CL-0002", name: "Maria Santos", phone: "09189876543", email: "maria@example.com", type: "Family", contact: "WhatsApp", source: "Referral", remarks: "Repeat customer", status: "Active" },
+    { id: "CL-0003", name: "Antonio Reyes", phone: "09195554321", email: "antonio@example.com", type: "Corporate", contact: "Email", source: "Website", remarks: "Corporate Account", status: "Active" }
+  ]);
 
-  // Modals state
-  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [bookings, setBookings] = useState([
+    { id: "BK-0001", date: "2026-10-01", clientId: "CL-0001", clientName: "Juan Dela Cruz", travelStart: "2026-11-10", travelEnd: "2026-11-15", package: "Bangkok 5D4N Deluxe", operator: "BANGKOK TRAVELS", type: "Group Tour", salesAmount: 45000, costAmount: 35000, status: "READY / FOR TRAVEL" },
+    { id: "BK-0002", date: "2026-10-05", clientId: "CL-0002", clientName: "Maria Santos", travelStart: "2026-12-01", travelEnd: "2026-12-05", package: "Tokyo Express 4D3N", operator: "GFT", type: "Customized", salesAmount: 85000, costAmount: 68000, status: "WITH PENDING" },
+    { id: "BK-0003", date: "2026-10-10", clientId: "CL-0003", clientName: "Antonio Reyes", travelStart: "2026-11-20", travelEnd: "2026-11-25", package: "Bali Leisure 6D5N", operator: "BLESS", type: "Group Tour", salesAmount: 62000, costAmount: 48000, status: "READY / FOR TRAVEL" }
+  ]);
 
-  // Syncing state
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [payments, setPayments] = useState([
+    { id: "PAY-0001", bookingId: "BK-0001", clientId: "CL-0001", date: "2026-10-02", amount: 45000, direction: "Client → Us", method: "GCash", refNo: "REF123456", type: "Full Payment", remarks: "Paid in full" },
+    { id: "PAY-0002", bookingId: "BK-0001", clientId: "CL-0001", date: "2026-10-03", amount: 35000, direction: "Us → Operator", method: "Bank Transfer", refNo: "REF654321", type: "Full Payment", remarks: "Paid operator" },
+    { id: "PAY-0003", bookingId: "BK-0002", clientId: "CL-0002", date: "2026-10-06", amount: 40000, direction: "Client → Us", method: "Credit Card", refNo: "REF789012", type: "Down Payment", remarks: "Initial DP" }
+  ]);
 
-  // Form States
-  const [newClient, setNewClient] = useState({ clientName: '', contactNo: '', email: '', clientType: 'Regular', prefContact: 'WhatsApp', clientSource: 'Direct', remarks: '' });
-  const [newBooking, setNewBooking] = useState({ clientId: '', travelStart: '', travelEnd: '', package: '', operator: 'GFT Tours', bookingType: 'Group Tour', salesAmount: '', costAmount: '', remarks: '' });
-  const [newPayment, setNewPayment] = useState({ bookingId: '', amount: '', direction: 'Client to Us', method: 'Bank Transfer', refNo: '', type: 'Deposit', remarks: '' });
+  // Form Field States
+  const [clientForm, setClientForm] = useState({ name: "", phone: "", email: "", type: "Individual", contact: "Viber", source: "Facebook", remarks: "" });
+  const [bookingForm, setBookingForm] = useState({ clientId: "", travelStart: "", travelEnd: "", package: "", operator: "BANGKOK TRAVELS", type: "Group Tour", salesAmount: "", costAmount: "" });
+  const [paymentForm, setPaymentForm] = useState({ bookingId: "", date: "", amount: "", direction: "Client → Us", method: "GCash", refNo: "", type: "Full Payment", remarks: "" });
 
-  // ==========================================
-  // HELPER: GOOGLE APPS SCRIPT WEBHOOK SYNC
-  // ==========================================
+  // Helper Function: Send Data to Google Sheet
   const sendToGoogleSheet = async (payload) => {
-    if (!GOOGLE_WEBHOOK_URL || GOOGLE_WEBHOOK_URL.includes("YOUR_DEPLOYMENT_ID")) {
-      return; // Skip if URL not configured yet
+    if (!GOOGLE_WEBHOOK_URL || GOOGLE_WEBHOOK_URL.includes("PASTE_YOUR_GOOGLE_APPS_SCRIPT_URL_HERE")) {
+      console.warn("Google Webhook URL not set. Data saved locally only.");
+      return;
     }
-    setIsSyncing(true);
+
     try {
-      await fetch(GOOGLE_WEBHOOK_URL, {
+      setIsSubmitting(true);
+      const response = await fetch(GOOGLE_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
-    } catch (err) {
-      console.error("Google Sheets webhook error:", err);
-    } finally {
-      setIsSyncing(false);
+      const result = await response.json();
+      if (result.status === "SUCCESS") {
+        alert("✅ Saved to Google Sheet successfully!");
+      }
+    } catch (error) {
+      console.error("Error pushing to Google Sheet:", error);
+    } font-semibold {
+      setIsSubmitting(false);
     }
   };
 
-  // ==========================================
-  // FINANCIAL & CALCULATED METRICS
-  // ==========================================
-  const calculatedBookings = useMemo(() => {
-    return bookings.map(b => {
-      const clientPaid = payments
-        .filter(p => p.bookingId === b.bookingId && p.direction === "Client to Us")
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      const operatorPaid = payments
-        .filter(p => p.bookingId === b.bookingId && p.direction === "Us to Operator")
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      const clientBalance = Number(b.salesAmount || 0) - clientPaid;
-      const operatorBalance = Number(b.costAmount || 0) - operatorPaid;
-      const grossProfit = Number(b.salesAmount || 0) - Number(b.costAmount || 0);
-
-      // Countdown Days
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const travelDate = new Date(b.travelStart);
-      const diffTime = travelDate - today;
-      const daysUntil = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      return {
-        ...b,
-        clientPaid,
-        clientBalance,
-        operatorPaid,
-        operatorBalance,
-        grossProfit,
-        daysUntil
-      };
-    });
-  }, [bookings, payments]);
-
-  const kpis = useMemo(() => {
-    const totalSales = calculatedBookings.reduce((sum, b) => sum + Number(b.salesAmount || 0), 0);
-    const totalCost = calculatedBookings.reduce((sum, b) => sum + Number(b.costAmount || 0), 0);
-    const grossProfit = totalSales - totalCost;
-    const clientBalancesDue = calculatedBookings.reduce((sum, b) => sum + Math.max(0, b.clientBalance), 0);
-    const operatorBalancesDue = calculatedBookings.reduce((sum, b) => sum + Math.max(0, b.operatorBalance), 0);
-    const upcomingDepartures = calculatedBookings.filter(b => b.daysUntil >= 0 && b.daysUntil <= 30).length;
-
-    return { totalSales, totalCost, grossProfit, clientBalancesDue, operatorBalancesDue, upcomingDepartures };
-  }, [calculatedBookings]);
-
-  // ==========================================
-  // HANDLERS: ADD CLIENT, BOOKING, PAYMENT
-  // ==========================================
-  const handleAddClient = (e) => {
+  // Form Submit Handlers
+  const handleClientSubmit = (e) => {
     e.preventDefault();
-    const clientId = `CL-${String(clients.length + 1).padStart(4, '0')}`;
-    const clientData = { clientId, ...newClient };
-    setClients([...clients, clientData]);
-    sendToGoogleSheet({ action: "ADD_CLIENT", ...clientData });
-    setIsClientModalOpen(false);
-    setNewClient({ clientName: '', contactNo: '', email: '', clientType: 'Regular', prefContact: 'WhatsApp', clientSource: 'Direct', remarks: '' });
+    const newId = `CL-${String(clients.length + 1).padStart(4, "0")}`;
+    const newClient = { id: newId, ...clientForm, status: "Active" };
+    setClients([...clients, newClient]);
+    sendToGoogleSheet({ action: "ADD_CLIENT", ...newClient });
+    setClientForm({ name: "", phone: "", email: "", type: "Individual", contact: "Viber", source: "Facebook", remarks: "" });
+    setIsModalOpen(false);
   };
 
-  const handleAddBooking = (e) => {
+  const handleBookingSubmit = (e) => {
     e.preventDefault();
-    const bookingId = `BK-${String(bookings.length + 1).padStart(4, '0')}`;
-    const clientObj = clients.find(c => c.clientId === newBooking.clientId);
-    const clientName = clientObj ? clientObj.clientName : 'Unknown Client';
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const bookingData = {
-      bookingId,
-      bookingDate: todayStr,
-      clientName,
-      invoice: "Pending",
-      ticket: "Pending",
-      voucher: "Pending",
-      baggage: "Pending",
-      briefing: "Pending",
-      otherPending: "",
-      overallStatus: "Confirmed",
-      ...newBooking
+    const newId = `BK-${String(bookings.length + 1).padStart(4, "0")}`;
+    const client = clients.find(c => c.id === bookingForm.clientId);
+    const newBooking = {
+      id: newId,
+      date: new Date().toISOString().split("T")[0],
+      clientName: client ? client.name : "",
+      ...bookingForm,
+      salesAmount: Number(bookingForm.salesAmount),
+      costAmount: Number(bookingForm.costAmount),
+      status: "READY / FOR TRAVEL"
     };
-
-    setBookings([...bookings, bookingData]);
-    sendToGoogleSheet({ action: "ADD_BOOKING", ...bookingData });
-    setIsBookingModalOpen(false);
-    setNewBooking({ clientId: '', travelStart: '', travelEnd: '', package: '', operator: 'GFT Tours', bookingType: 'Group Tour', salesAmount: '', costAmount: '', remarks: '' });
+    setBookings([...bookings, newBooking]);
+    sendToGoogleSheet({ action: "ADD_BOOKING", ...newBooking });
+    setBookingForm({ clientId: "", travelStart: "", travelEnd: "", package: "", operator: "BANGKOK TRAVELS", type: "Group Tour", salesAmount: "", costAmount: "" });
+    setIsModalOpen(false);
   };
 
-  const handleAddPayment = (e) => {
+  const handlePaymentSubmit = (e) => {
     e.preventDefault();
-    const paymentId = `PAY-${String(payments.length + 1).padStart(4, '0')}`;
-    const targetBooking = bookings.find(b => b.bookingId === newPayment.bookingId);
-    const clientId = targetBooking ? targetBooking.clientId : '';
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const paymentData = {
-      paymentId,
-      clientId,
-      paymentDate: todayStr,
-      ...newPayment
+    const newId = `PAY-${String(payments.length + 1).padStart(4, "0")}`;
+    const booking = bookings.find(b => b.id === paymentForm.bookingId);
+    const newPayment = {
+      id: newId,
+      clientId: booking ? booking.clientId : "",
+      ...paymentForm,
+      amount: Number(paymentForm.amount)
     };
-
-    setPayments([...payments, paymentData]);
-    sendToGoogleSheet({ action: "ADD_PAYMENT", ...paymentData });
-    setIsPaymentModalOpen(false);
-    setNewPayment({ bookingId: '', amount: '', direction: 'Client to Us', method: 'Bank Transfer', refNo: '', type: 'Deposit', remarks: '' });
+    setPayments([...payments, newPayment]);
+    sendToGoogleSheet({ action: "ADD_PAYMENT", ...newPayment });
+    setPaymentForm({ bookingId: "", date: "", amount: "", direction: "Client → Us", method: "GCash", refNo: "", type: "Full Payment", remarks: "" });
+    setIsModalOpen(false);
   };
 
-  // ==========================================
-  // EXCEL IMPORT / EXPORT ENGINE
-  // ==========================================
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    const wsDashboard = XLSX.utils.json_to_sheet([{
-      TotalSales: kpis.totalSales,
-      TotalCost: kpis.totalCost,
-      GrossProfit: kpis.grossProfit,
-      ClientBalancesDue: kpis.clientBalancesDue,
-      OperatorBalancesDue: kpis.operatorBalancesDue
-    }]);
-
-    const wsClients = XLSX.utils.json_to_sheet(clients);
-    const wsBookings = XLSX.utils.json_to_sheet(calculatedBookings);
-    const wsPayments = XLSX.utils.json_to_sheet(payments);
-
-    XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard");
-    XLSX.utils.book_append_sheet(wb, wsClients, "Clients");
-    XLSX.utils.book_append_sheet(wb, wsBookings, "Bookings");
-    XLSX.utils.book_append_sheet(wb, wsPayments, "Payments");
-
-    XLSX.writeFile(wb, "Master_Database_Travel_Portal.xlsx");
-  };
-
-  const handleImportExcel = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-
-      if (wb.SheetNames.includes("Clients")) {
-        setClients(XLSX.utils.sheet_to_json(wb.Sheets["Clients"]));
-      }
-      if (wb.SheetNames.includes("Bookings")) {
-        setBookings(XLSX.utils.sheet_to_json(wb.Sheets["Bookings"]));
-      }
-      if (wb.SheetNames.includes("Payments")) {
-        setPayments(XLSX.utils.sheet_to_json(wb.Sheets["Payments"]));
-      }
-      alert("Excel file imported successfully!");
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // ==========================================
-  // FILTERED DATA VIEWS
-  // ==========================================
-  const filteredBookings = calculatedBookings.filter(b => {
-    const matchesSearch = b.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          b.bookingId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          b.package.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (filterStatus === 'DEPARTING_SOON') return matchesSearch && b.daysUntil >= 0 && b.daysUntil <= 7;
-    if (filterStatus === 'BALANCE_DUE') return matchesSearch && b.clientBalance > 0;
-    return matchesSearch;
-  });
+  // KPI Calculations
+  const totalSales = bookings.reduce((sum, b) => sum + (b.salesAmount || 0), 0);
+  const totalClientPaid = payments.filter(p => p.direction === "Client → Us").reduce((sum, p) => sum + p.amount, 0);
+  const totalOutstanding = Math.max(0, totalSales - totalClientPaid);
+  const totalProfit = bookings.reduce((sum, b) => sum + ((b.salesAmount || 0) - (b.costAmount || 0)), 0);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-      {/* HEADER BAR */}
-      <header className="border-b border-slate-800 bg-slate-950 px-6 py-4 sticky top-0 z-40 shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-600/30">
-              <FileSpreadsheet className="w-6 h-6" />
+    <div className="flex h-screen bg-slate-900 text-slate-100 font-sans">
+      {/* Sidebar Navigation */}
+      <aside className="w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between">
+        <div>
+          <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+            <div className="p-2 bg-blue-600 rounded-lg text-white">
+              <Plane className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">Travel Agency Operations Portal</h1>
-              <p className="text-xs text-slate-400 flex items-center gap-2">
-                Live Google Drive & Excel Sync Engine
-                {isSyncing && <span className="text-amber-400 text-xs animate-pulse">● Syncing changes...</span>}
-              </p>
+              <h1 className="font-bold text-lg text-white leading-none">Travel Master</h1>
+              <p className="text-xs text-slate-400 mt-1">Operations Hub</p>
             </div>
           </div>
 
-          {/* ACTION BUTTONS */}
-          <div className="flex items-center space-x-3">
-            <label className="flex items-center px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium cursor-pointer border border-slate-700 transition">
-              <Upload className="w-4 h-4 mr-2 text-blue-400" />
-              Import Excel
-              <input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="hidden" />
-            </label>
+          <nav className="p-4 space-y-1">
             <button
-              onClick={handleExportExcel}
-              className="flex items-center px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition"
+              onClick={() => setActiveTab("dashboard")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === "dashboard" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
             >
-              <Download className="w-4 h-4 mr-2 text-emerald-400" />
-              Export .XLSX
+              <LayoutDashboard className="w-5 h-5" /> Dashboard
             </button>
             <button
-              onClick={() => setIsBookingModalOpen(true)}
-              className="flex items-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold shadow-lg shadow-blue-600/20 transition"
+              onClick={() => setActiveTab("clients")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === "clients" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
             >
-              <Plus className="w-4 h-4 mr-1.5" />
-              New Booking
+              <Users className="w-5 h-5" /> Clients Database
             </button>
-          </div>
+            <button
+              onClick={() => setActiveTab("bookings")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === "bookings" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+            >
+              <Calendar className="w-5 h-5" /> Bookings
+            </button>
+            <button
+              onClick={() => setActiveTab("payments")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                activeTab === "payments" ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+            >
+              <CreditCard className="w-5 h-5" /> Payments
+            </button>
+          </nav>
         </div>
 
-        {/* NAVIGATION TABS */}
-        <nav className="flex space-x-1 mt-6 border-b border-slate-800">
-          {[
-            { id: 'dashboard', label: 'Executive Dashboard', icon: TrendingUp },
-            { id: 'bookings', label: 'Bookings & Departure Monitor', icon: Calendar },
-            { id: 'clients', label: 'Client Directory', icon: Users },
-            { id: 'payments', label: 'Payments Ledger', icon: CreditCard }
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-4 py-2.5 font-medium text-sm border-b-2 transition ${
-                  active
-                    ? 'border-blue-500 text-blue-400 bg-slate-800/50 rounded-t-lg'
-                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                }`}
-              >
-                <Icon className="w-4 h-4 mr-2" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </header>
+        <div className="p-4 border-t border-slate-800">
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900 p-3 rounded-lg border border-slate-800">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Google Sheet Sync Active</span>
+          </div>
+        </div>
+      </aside>
 
-      {/* MAIN CONTAINER */}
-      <main className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto bg-slate-900 p-8">
+        {/* Header Bar */}
+        <header className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-white capitalize">{activeTab} Overview</h2>
+            <p className="text-sm text-slate-400">Manage real-time travel bookings and sync with Google Drive.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                setModalType(activeTab === "dashboard" ? "booking" : activeTab.slice(0, -1));
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition shadow-lg shadow-blue-600/20"
+            >
+              <Plus className="w-4 h-4" /> Add New Record
+            </button>
+          </div>
+        </header>
 
-        {/* ================= TAB 1: EXECUTIVE DASHBOARD ================= */}
-        {activeTab === 'dashboard' && (
-          <div className="space-y-6">
-            {/* STAT CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="p-5 bg-slate-800/80 rounded-2xl border border-slate-700/60 shadow-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-400">Total Revenue</p>
-                    <p className="text-2xl font-bold text-white mt-1">₱{kpis.totalSales.toLocaleString()}</p>
-                  </div>
-                  <div className="p-2.5 bg-blue-500/10 text-blue-400 rounded-xl">
-                    <DollarSign className="w-6 h-6" />
-                  </div>
+        {/* Dynamic Views */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-8">
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-slate-800 border border-slate-700/60 p-5 rounded-xl">
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Total Sales</span>
+                  <DollarSign className="w-5 h-5 text-blue-400" />
                 </div>
-                <div className="mt-3 text-xs text-slate-400 flex items-center">
-                  Gross Profit: <span className="text-emerald-400 font-semibold ml-1">₱{kpis.grossProfit.toLocaleString()}</span>
-                </div>
+                <div className="text-2xl font-bold text-white">₱{totalSales.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
               </div>
 
-              <div className="p-5 bg-slate-800/80 rounded-2xl border border-slate-700/60 shadow-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-400">Pending Client Balances</p>
-                    <p className="text-2xl font-bold text-amber-400 mt-1">₱{kpis.clientBalancesDue.toLocaleString()}</p>
-                  </div>
-                  <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl">
-                    <AlertCircle className="w-6 h-6" />
-                  </div>
+              <div className="bg-slate-800 border border-slate-700/60 p-5 rounded-xl">
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Collected Payments</span>
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
                 </div>
-                <p className="mt-3 text-xs text-slate-400">Receivables from clients</p>
+                <div className="text-2xl font-bold text-emerald-400">₱{totalClientPaid.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
               </div>
 
-              <div className="p-5 bg-slate-800/80 rounded-2xl border border-slate-700/60 shadow-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-400">Unpaid Operator Cost</p>
-                    <p className="text-2xl font-bold text-rose-400 mt-1">₱{kpis.operatorBalancesDue.toLocaleString()}</p>
-                  </div>
-                  <div className="p-2.5 bg-rose-500/10 text-rose-400 rounded-xl">
-                    <ArrowDownLeft className="w-6 h-6" />
-                  </div>
+              <div className="bg-slate-800 border border-slate-700/60 p-5 rounded-xl">
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Outstanding Balance</span>
+                  <AlertCircle className="w-5 h-5 text-amber-400" />
                 </div>
-                <p className="mt-3 text-xs text-slate-400">Payables to tour suppliers</p>
+                <div className="text-2xl font-bold text-amber-400">₱{totalOutstanding.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
               </div>
 
-              <div className="p-5 bg-slate-800/80 rounded-2xl border border-slate-700/60 shadow-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-400">Upcoming Departures (30 Days)</p>
-                    <p className="text-2xl font-bold text-blue-400 mt-1">{kpis.upcomingDepartures} Bookings</p>
-                  </div>
-                  <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-xl">
-                    <Clock className="w-6 h-6" />
-                  </div>
+              <div className="bg-slate-800 border border-slate-700/60 p-5 rounded-xl">
+                <div className="flex items-center justify-between text-slate-400 mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Gross Profit</span>
+                  <TrendingUp className="w-5 h-5 text-emerald-400" />
                 </div>
-                <p className="mt-3 text-xs text-slate-400">Requires voucher & ticket dispatch</p>
+                <div className="text-2xl font-bold text-white">₱{totalProfit.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
               </div>
             </div>
 
-            {/* DEPARTURE MONITOR PREVIEW */}
-            <div className="bg-slate-800/80 rounded-2xl border border-slate-700/60 p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-bold text-white flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-blue-400" />
-                  Immediate Travel Departures Monitor
-                </h2>
-                <button
-                  onClick={() => setActiveTab('bookings')}
-                  className="text-xs font-medium text-blue-400 hover:text-blue-300 flex items-center"
-                >
-                  View All Bookings <ChevronRight className="w-4 h-4 ml-1" />
+            {/* Recent Bookings Table */}
+            <div className="bg-slate-800 border border-slate-700/60 rounded-xl overflow-hidden">
+              <div className="p-5 border-b border-slate-700 flex items-center justify-between">
+                <h3 className="font-semibold text-white">Recent Active Bookings</h3>
+                <button onClick={() => setActiveTab("bookings")} className="text-xs text-blue-400 hover:underline flex items-center gap-1">
+                  View All <ArrowUpRight className="w-3 h-3" />
                 </button>
               </div>
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase font-semibold">
+                  <tr>
+                    <th className="px-6 py-3">Booking ID</th>
+                    <th className="px-6 py-3">Client</th>
+                    <th className="px-6 py-3">Package</th>
+                    <th className="px-6 py-3">Sales Amount</th>
+                    <th className="px-6 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/50">
+                  {bookings.slice(-5).map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-700/30">
+                      <td className="px-6 py-4 font-mono text-blue-400">{b.id}</td>
+                      <td className="px-6 py-4 font-medium text-white">{b.clientName}</td>
+                      <td className="px-6 py-4">{b.package}</td>
+                      <td className="px-6 py-4 font-semibold text-white">₱{b.salesAmount?.toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          b.status === "READY / FOR TRAVEL" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                        }`}>
+                          {b.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
-              <div className="space-y-3">
-                {calculatedBookings.map((b) => (
-                  <div key={b.bookingId} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-900/60 rounded-xl border border-slate-800 gap-4">
-                    <div className="flex items-center space-x-4">
-                      <div className={`px-3 py-1.5 rounded-lg text-xs font-bold text-center ${
-                        b.daysUntil <= 7 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-blue-500/20 text-blue-400'
-                      }`}>
-                        {b.daysUntil < 0 ? 'Completed' : b.daysUntil === 0 ? 'TODAY' : `${b.daysUntil} Days Left`}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-100">{b.package}</h3>
-                        <p className="text-xs text-slate-400">Client: {b.clientName} ({b.bookingId}) • Operator: {b.operator}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-6 text-xs">
-                      <div>
-                        <p className="text-slate-400">Travel Window</p>
-                        <p className="font-medium text-slate-200">{b.travelStart} to {b.travelEnd}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Client Balance</p>
-                        <p className={`font-bold ${b.clientBalance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          {b.clientBalance > 0 ? `₱${b.clientBalance.toLocaleString()}` : 'Paid'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+        {/* Clients Tab */}
+        {activeTab === "clients" && (
+          <div className="bg-slate-800 border border-slate-700/60 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase font-semibold">
+                <tr>
+                  <th className="px-6 py-3">Client ID</th>
+                  <th className="px-6 py-3">Full Name</th>
+                  <th className="px-6 py-3">Contact</th>
+                  <th className="px-6 py-3">Email</th>
+                  <th className="px-6 py-3">Type</th>
+                  <th className="px-6 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {clients.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-700/30">
+                    <td className="px-6 py-4 font-mono text-blue-400">{c.id}</td>
+                    <td className="px-6 py-4 font-medium text-white">{c.name}</td>
+                    <td className="px-6 py-4">{c.phone}</td>
+                    <td className="px-6 py-4">{c.email}</td>
+                    <td className="px-6 py-4">{c.type}</td>
+                    <td className="px-6 py-4"><span className="text-emerald-400 font-semibold">{c.status}</span></td>
+                  </tr>
                 ))}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
         )}
 
-        {/* ================= TAB 2: BOOKINGS SCHEDULE ================= */}
-        {activeTab === 'bookings' && (
-          <div className="space-y-4">
-            {/* SEARCH & FILTER BAR */}
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-800/80 p-4 rounded-xl border border-slate-700">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search client, booking ID, package..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg pl-9 pr-4 py-2 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="ALL">All Bookings</option>
-                  <option value="DEPARTING_SOON">Departing in 7 Days</option>
-                  <option value="BALANCE_DUE">Client Balance Due</option>
-                </select>
-              </div>
-            </div>
-
-            {/* BOOKINGS TABLE */}
-            <div className="bg-slate-800/80 rounded-2xl border border-slate-700/60 overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 uppercase text-xs border-b border-slate-800 font-semibold">
-                    <tr>
-                      <th className="px-4 py-3.5">Booking ID</th>
-                      <th className="px-4 py-3.5">Client Name</th>
-                      <th className="px-4 py-3.5">Package & Dates</th>
-                      <th className="px-4 py-3.5">Countdown</th>
-                      <th className="px-4 py-3.5">Sales Amount</th>
-                      <th className="px-4 py-3.5">Client Balance</th>
-                      <th className="px-4 py-3.5">Operator Balance</th>
-                      <th className="px-4 py-3.5">Profit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filteredBookings.map((b) => (
-                      <tr key={b.bookingId} className="hover:bg-slate-700/30 transition">
-                        <td className="px-4 py-3 font-semibold text-blue-400">{b.bookingId}</td>
-                        <td className="px-4 py-3 font-medium text-slate-100">{b.clientName}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-slate-200">{b.package}</div>
-                          <div className="text-xs text-slate-400">{b.travelStart} ~ {b.travelEnd}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                            b.daysUntil <= 7 ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-300'
-                          }`}>
-                            {b.daysUntil < 0 ? 'Completed' : `${b.daysUntil} Days`}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-medium">₱{Number(b.salesAmount).toLocaleString()}</td>
-                        <td className="px-4 py-3 font-semibold">
-                          <span className={b.clientBalance > 0 ? 'text-amber-400' : 'text-emerald-400'}>
-                            ₱{b.clientBalance.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-semibold">
-                          <span className={b.operatorBalance > 0 ? 'text-rose-400' : 'text-emerald-400'}>
-                            ₱{b.operatorBalance.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-bold text-emerald-400">₱{b.grossProfit.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {/* Bookings Tab */}
+        {activeTab === "bookings" && (
+          <div className="bg-slate-800 border border-slate-700/60 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase font-semibold">
+                <tr>
+                  <th className="px-6 py-3">Booking ID</th>
+                  <th className="px-6 py-3">Client Name</th>
+                  <th className="px-6 py-3">Travel Dates</th>
+                  <th className="px-6 py-3">Package</th>
+                  <th className="px-6 py-3">Operator</th>
+                  <th className="px-6 py-3">Sales Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {bookings.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-700/30">
+                    <td className="px-6 py-4 font-mono text-blue-400">{b.id}</td>
+                    <td className="px-6 py-4 font-medium text-white">{b.clientName}</td>
+                    <td className="px-6 py-4">{b.travelStart} to {b.travelEnd}</td>
+                    <td className="px-6 py-4">{b.package}</td>
+                    <td className="px-6 py-4">{b.operator}</td>
+                    <td className="px-6 py-4 font-semibold text-white">₱{b.salesAmount?.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {/* ================= TAB 3: CLIENT DIRECTORY ================= */}
-        {activeTab === 'clients' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold text-white">Registered Clients ({clients.length})</h2>
-              <button
-                onClick={() => setIsClientModalOpen(true)}
-                className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold shadow transition"
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Add Client
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {clients.map((c) => (
-                <div key={c.clientId} className="p-5 bg-slate-800/80 rounded-2xl border border-slate-700/60 shadow-lg space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xs font-bold text-blue-400 uppercase">{c.clientId}</span>
-                      <h3 className="text-base font-bold text-white">{c.clientName}</h3>
-                    </div>
-                    <span className="px-2.5 py-1 bg-slate-700 text-slate-300 rounded-full text-xs font-medium">
-                      {c.clientType}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-300 space-y-1 pt-2 border-t border-slate-700/50">
-                    <p><span className="text-slate-500">Contact:</span> {c.contactNo}</p>
-                    <p><span className="text-slate-500">Email:</span> {c.email}</p>
-                    <p><span className="text-slate-500">Source:</span> {c.clientSource}</p>
-                    {c.remarks && <p className="italic text-slate-400 pt-1">"{c.remarks}"</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Payments Tab */}
+        {activeTab === "payments" && (
+          <div className="bg-slate-800 border border-slate-700/60 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase font-semibold">
+                <tr>
+                  <th className="px-6 py-3">Payment ID</th>
+                  <th className="px-6 py-3">Booking ID</th>
+                  <th className="px-6 py-3">Date</th>
+                  <th className="px-6 py-3">Direction</th>
+                  <th className="px-6 py-3">Method</th>
+                  <th className="px-6 py-3">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {payments.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-700/30">
+                    <td className="px-6 py-4 font-mono text-blue-400">{p.id}</td>
+                    <td className="px-6 py-4 font-mono text-slate-400">{p.bookingId}</td>
+                    <td className="px-6 py-4">{p.date}</td>
+                    <td className="px-6 py-4">{p.direction}</td>
+                    <td className="px-6 py-4">{p.method}</td>
+                    <td className="px-6 py-4 font-semibold text-emerald-400">₱{p.amount?.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-
-        {/* ================= TAB 4: PAYMENTS LEDGER ================= */}
-        {activeTab === 'payments' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold text-white">Financial Transactions Ledger</h2>
-              <button
-                onClick={() => setIsPaymentModalOpen(true)}
-                className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold shadow transition"
-              >
-                <Plus className="w-4 h-4 mr-1.5" /> Record Payment
-              </button>
-            </div>
-
-            <div className="bg-slate-800/80 rounded-2xl border border-slate-700/60 overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 uppercase text-xs border-b border-slate-800 font-semibold">
-                    <tr>
-                      <th className="px-4 py-3.5">Payment ID</th>
-                      <th className="px-4 py-3.5">Booking ID</th>
-                      <th className="px-4 py-3.5">Date</th>
-                      <th className="px-4 py-3.5">Direction</th>
-                      <th className="px-4 py-3.5">Amount</th>
-                      <th className="px-4 py-3.5">Method</th>
-                      <th className="px-4 py-3.5">Reference No.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {payments.map((p) => (
-                      <tr key={p.paymentId} className="hover:bg-slate-700/30 transition">
-                        <td className="px-4 py-3 font-semibold text-slate-200">{p.paymentId}</td>
-                        <td className="px-4 py-3 text-blue-400 font-medium">{p.bookingId}</td>
-                        <td className="px-4 py-3 text-slate-400">{p.paymentDate}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            p.direction === 'Client to Us' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                          }`}>
-                            {p.direction}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-bold text-white">₱{Number(p.amount).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-slate-300">{p.method}</td>
-                        <td className="px-4 py-3 text-slate-400 font-mono text-xs">{p.refNo}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
       </main>
 
-      {/* ==========================================
-          MODAL: ADD NEW BOOKING
-      ========================================== */}
-      {isBookingModalOpen && (
+      {/* Modal Popup Dialog */}
+      {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Add New Travel Booking</h3>
-              <button onClick={() => setIsBookingModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4">Add New Record</h3>
+
+            <div className="flex gap-2 mb-6">
+              <button onClick={() => setModalType("client")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${modalType === "client" ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300"}`}>Client</button>
+              <button onClick={() => setModalType("booking")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${modalType === "booking" ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300"}`}>Booking</button>
+              <button onClick={() => setModalType("payment")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${modalType === "payment" ? "bg-blue-600 text-white" : "bg-slate-700 text-slate-300"}`}>Payment</button>
             </div>
 
-            <form onSubmit={handleAddBooking} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Select Client</label>
-                <select
-                  required
-                  value={newBooking.clientId}
-                  onChange={(e) => setNewBooking({...newBooking, clientId: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">-- Choose Client --</option>
-                  {clients.map(c => (
-                    <option key={c.clientId} value={c.clientId}>{c.clientName} ({c.clientId})</option>
-                  ))}
+            {modalType === "client" && (
+              <form onSubmit={handleClientSubmit} className="space-y-4">
+                <input required type="text" placeholder="Full Name" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <input required type="text" placeholder="Phone Number" value={clientForm.phone} onChange={e => setClientForm({...clientForm, phone: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <input required type="email" placeholder="Email Address" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">{isSubmitting ? "Saving..." : "Save Client"}</button>
+                </div>
+              </form>
+            )}
+
+            {modalType === "booking" && (
+              <form onSubmit={handleBookingSubmit} className="space-y-4">
+                <select required value={bookingForm.clientId} onChange={e => setBookingForm({...bookingForm, clientId: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Select Client</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.id})</option>)}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Tour Package Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Tokyo 5D4N Autumn Special"
-                  value={newBooking.package}
-                  onChange={(e) => setNewBooking({...newBooking, package: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Travel Start Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={newBooking.travelStart}
-                    onChange={(e) => setNewBooking({...newBooking, travelStart: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
+                <input required type="text" placeholder="Package Name" value={bookingForm.package} onChange={e => setBookingForm({...bookingForm, package: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <div className="grid grid-cols-2 gap-4">
+                  <input required type="date" value={bookingForm.travelStart} onChange={e => setBookingForm({...bookingForm, travelStart: e.target.value})} className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                  <input required type="date" value={bookingForm.travelEnd} onChange={e => setBookingForm({...bookingForm, travelEnd: e.target.value})} className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Travel End Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={newBooking.travelEnd}
-                    onChange={(e) => setNewBooking({...newBooking, travelEnd: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <input required type="number" placeholder="Sales Amount" value={bookingForm.salesAmount} onChange={e => setBookingForm({...bookingForm, salesAmount: e.target.value})} className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                  <input required type="number" placeholder="Cost Amount" value={bookingForm.costAmount} onChange={e => setBookingForm({...bookingForm, costAmount: e.target.value})} className="bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Sales Amount (Client Price)</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="65000"
-                    value={newBooking.salesAmount}
-                    onChange={(e) => setNewBooking({...newBooking, salesAmount: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">{isSubmitting ? "Saving..." : "Save Booking"}</button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Operator Net Cost</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="48000"
-                    value={newBooking.costAmount}
-                    onChange={(e) => setNewBooking({...newBooking, costAmount: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
+              </form>
+            )}
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsBookingModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-medium hover:bg-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-500 shadow-lg shadow-blue-600/30"
-                >
-                  Save Booking & Sync
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ==========================================
-          MODAL: ADD NEW CLIENT
-      ========================================== */}
-      {isClientModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Register New Client</h3>
-              <button onClick={() => setIsClientModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddClient} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Full Client / Company Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Juan Dela Cruz"
-                  value={newClient.clientName}
-                  onChange={(e) => setNewClient({...newClient, clientName: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Contact No.</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="09171234567"
-                    value={newClient.contactNo}
-                    onChange={(e) => setNewClient({...newClient, contactNo: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="client@example.com"
-                    value={newClient.email}
-                    onChange={(e) => setNewClient({...newClient, email: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsClientModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-medium hover:bg-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-500 shadow-lg shadow-blue-600/30"
-                >
-                  Save Client & Sync
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ==========================================
-          MODAL: RECORD PAYMENT
-      ========================================== */}
-      {isPaymentModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Record New Payment</h3>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddPayment} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Select Booking</label>
-                <select
-                  required
-                  value={newPayment.bookingId}
-                  onChange={(e) => setNewPayment({...newPayment, bookingId: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">-- Choose Booking --</option>
-                  {bookings.map(b => (
-                    <option key={b.bookingId} value={b.bookingId}>{b.bookingId} - {b.clientName} ({b.package})</option>
-                  ))}
+            {modalType === "payment" && (
+              <form onSubmit={handlePaymentSubmit} className="space-y-4">
+                <select required value={paymentForm.bookingId} onChange={e => setPaymentForm({...paymentForm, bookingId: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+                  <option value="">Select Booking</option>
+                  {bookings.map(b => <option key={b.id} value={b.id}>{b.id} - {b.clientName}</option>)}
                 </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Payment Direction</label>
-                  <select
-                    value={newPayment.direction}
-                    onChange={(e) => setNewPayment({...newPayment, direction: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="Client to Us">Client to Us (Receivable)</option>
-                    <option value="Us to Operator">Us to Operator (Payable)</option>
-                  </select>
+                <input required type="date" value={paymentForm.date} onChange={e => setPaymentForm({...paymentForm, date: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <input required type="number" placeholder="Payment Amount" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-blue-500" />
+                <div className="flex justify-end gap-3 pt-4">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+                  <button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-semibold">{isSubmitting ? "Saving..." : "Save Payment"}</button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Amount Paid (₱)</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="15000"
-                    value={newPayment.amount}
-                    onChange={(e) => setNewPayment({...newPayment, amount: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Method</label>
-                  <select
-                    value={newPayment.method}
-                    onChange={(e) => setNewPayment({...newPayment, method: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="GCash">GCash</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Cash">Cash</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Reference No.</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="TXN-998123"
-                    value={newPayment.refNo}
-                    onChange={(e) => setNewPayment({...newPayment, refNo: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg font-medium hover:bg-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-500 shadow-lg shadow-blue-600/30"
-                >
-                  Save Payment & Sync
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
         </div>
       )}
